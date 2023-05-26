@@ -17,6 +17,7 @@ import com.techyourchance.multithreading.R;
 import com.techyourchance.multithreading.common.BaseFragment;
 
 import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,9 +30,9 @@ public class Exercise4Fragment extends BaseFragment {
         return new Exercise4Fragment();
     }
 
-    private static int MAX_TIMEOUT_MS = DefaultConfiguration.DEFAULT_FACTORIAL_TIMEOUT_MS;
+    private static final int MAX_TIMEOUT_MS = DefaultConfiguration.DEFAULT_FACTORIAL_TIMEOUT_MS;
 
-    private Handler mUiHandler = new Handler(Looper.getMainLooper());
+    private final Handler mUiHandler = new Handler(Looper.getMainLooper());
 
     private EditText mEdtArgument;
     private EditText mEdtTimeout;
@@ -41,11 +42,11 @@ public class Exercise4Fragment extends BaseFragment {
     private int mNumberOfThreads;
     private ComputationRange[] mThreadsComputationRanges;
     private BigInteger[] mThreadsComputationResults;
-    private int mNumOfFinishedThreads;
+    private final AtomicInteger mNumOfFinishedThreads = new AtomicInteger(0);
 
     private long mComputationTimeoutTime;
 
-    private boolean mAbortComputation;
+    private volatile boolean mAbortComputation;
 
     @Nullable
     @Override
@@ -118,15 +119,20 @@ public class Exercise4Fragment extends BaseFragment {
     }
 
     private void initComputationParams(int factorialArgument, int timeout) {
+        // Se o fatorial for menor que 20, executa em uma só thread, senao pega os processos disponíveis para definir o número de threads que posso rodar
         mNumberOfThreads = factorialArgument < 20
                 ? 1 : Runtime.getRuntime().availableProcessors();
 
-        mNumOfFinishedThreads = 0;
+        // Quando inicializa, reserta o número de threads finalizadas
+        mNumOfFinishedThreads.set(0);
 
+        // Reset abort computation
         mAbortComputation = false;
 
+        // Reseta o array que receberá os resultados
         mThreadsComputationResults = new BigInteger[mNumberOfThreads];
 
+        // Reseta o array que receberá os resultados
         mThreadsComputationRanges = new ComputationRange[mNumberOfThreads];
 
         initThreadsComputationRanges(factorialArgument);
@@ -135,6 +141,7 @@ public class Exercise4Fragment extends BaseFragment {
     }
 
     private void initThreadsComputationRanges(int factorialArgument) {
+        //
         int computationRangeSize = factorialArgument / mNumberOfThreads;
 
         long nextComputationRangeEnd = factorialArgument;
@@ -169,7 +176,7 @@ public class Exercise4Fragment extends BaseFragment {
                         product = product.multiply(new BigInteger(String.valueOf(num)));
                     }
                     mThreadsComputationResults[threadIndex] = product;
-                    mNumOfFinishedThreads++;
+                    mNumOfFinishedThreads.incrementAndGet();
                 }
             }).start();
 
@@ -179,7 +186,7 @@ public class Exercise4Fragment extends BaseFragment {
     @WorkerThread
     private void waitForThreadsResultsOrTimeoutOrAbort() {
         while (true) {
-            if (mNumOfFinishedThreads == mNumberOfThreads) {
+            if (mNumOfFinishedThreads.get() == mNumberOfThreads) {
                 break;
             } else if(mAbortComputation) {
                 break;
