@@ -128,10 +128,12 @@ public class Exercise5Fragment extends BaseFragment {
             @Override
             public void run() {
                 try {
+                    // I believe it's not time enough: 0
                     Thread.sleep(DefaultConfiguration.DEFAULT_PRODUCER_DELAY_MS);
                 } catch (InterruptedException e) {
                     return;
                 }
+                // Concurrency here. Need to put safe.
                 mBlockingQueue.put(index);
             }
         }).start();
@@ -141,6 +143,7 @@ public class Exercise5Fragment extends BaseFragment {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                // Concurrency here. Need to get safe.
                 int message = mBlockingQueue.take();
                 synchronized (LOCK) {
                     if (message != -1) {
@@ -173,6 +176,8 @@ public class Exercise5Fragment extends BaseFragment {
      */
     private static class MyBlockingQueue {
 
+        private final Object QUEUE_LOCK = new Object();
+
         private final int mCapacity;
         private final Queue<Integer> mQueue = new LinkedList<>();
 
@@ -189,9 +194,17 @@ public class Exercise5Fragment extends BaseFragment {
          * @param number the element to add
          */
         public void put(int number) {
-            if (mCurrentSize < mCapacity) {
+            synchronized (QUEUE_LOCK) {
+                while (mCurrentSize >= mCapacity) {
+                    try {
+                        QUEUE_LOCK.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
                 mQueue.offer(number);
                 mCurrentSize++;
+                QUEUE_LOCK.notifyAll();
             }
         }
 
@@ -202,15 +215,18 @@ public class Exercise5Fragment extends BaseFragment {
          * @return the head of this queue
          */
         public int take() {
-            if (mCurrentSize > 0) {
-                mCurrentSize--;
-                Integer message = mQueue.poll();
-                if (message != null) {
-                    return message;
+            synchronized (QUEUE_LOCK) {
+                while (mCurrentSize <= 0) {
+                    try {
+                        QUEUE_LOCK.wait();
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
+                mCurrentSize--;
+                QUEUE_LOCK.notifyAll();
+                return mQueue.poll();
             }
-
-            return -1;
         }
     }
 }
